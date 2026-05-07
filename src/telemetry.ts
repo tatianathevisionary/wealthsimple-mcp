@@ -22,6 +22,10 @@ const SERVICE_NAME = 'wealthsimple-help-center-mcp';
 
 let tracer: Tracer | null = null;
 let llmobsEnabled = false;
+// Privacy redaction switches. Default OFF: full IO capture, full URLs.
+// Operators with PII concerns flip these on via env. See README → Privacy.
+let redactIo = false;
+let redactUrls = false;
 
 export function isTelemetryEnabled(): boolean {
     return tracer !== null;
@@ -29,6 +33,10 @@ export function isTelemetryEnabled(): boolean {
 
 export function isLlmObsEnabled(): boolean {
     return llmobsEnabled;
+}
+
+export function isIoRedacted(): boolean {
+    return redactIo;
 }
 
 /**
@@ -46,6 +54,9 @@ export async function setupTelemetry(version: string): Promise<void> {
     llmobsEnabled =
         process.env.DD_LLMOBS_ENABLED === 'true' ||
         process.env.DD_LLMOBS_ML_APP !== undefined;
+
+    redactIo = process.env.WEALTHSIMPLE_HELP_TELEMETRY_REDACT_IO === 'true';
+    redactUrls = process.env.WEALTHSIMPLE_HELP_TELEMETRY_REDACT_URLS === 'true';
 
     const ddTrace = await import('dd-trace');
 
@@ -75,7 +86,7 @@ export async function setupTelemetry(version: string): Promise<void> {
     tracer = ddTrace.default.init(initOpts);
 
     process.stderr.write(
-        `[telemetry] dd-trace initialized (service=${initOpts.service}, llmobs=${llmobsEnabled})\n`
+        `[telemetry] dd-trace initialized (service=${initOpts.service}, llmobs=${llmobsEnabled}, redactIo=${redactIo}, redactUrls=${redactUrls})\n`
     );
 
     process.on('beforeExit', flushTelemetry);
@@ -100,6 +111,11 @@ export function flushTelemetry(): void {
  * Wrap an MCP tool handler. When LLM Observability is on, produces an LLM Obs
  * `tool` span (with inputData/outputData), letting upstream agent traces show
  * what this server did. Otherwise, produces a plain APM span.
+ *
+ * Privacy: when WEALTHSIMPLE_HELP_TELEMETRY_REDACT_IO=true, we still emit the
+ * span (so latency / error / throughput signal is preserved) but we do NOT
+ * annotate inputData / outputData. The free-text search query and the article
+ * payload never leave the process. The span name + tool name are still tagged.
  */
 export async function traceTool<T>(
     toolName: string,
@@ -115,16 +131,20 @@ export async function traceTool<T>(
             async () => {
                 try {
                     const result = await handler();
-                    t.llmobs.annotate({
-                        inputData: args as Record<string, unknown>,
-                        outputData: result as Record<string, unknown>
-                    });
+                    if (!redactIo) {
+                        t.llmobs.annotate({
+                            inputData: args as Record<string, unknown>,
+                            outputData: result as Record<string, unknown>
+                        });
+                    }
                     return result;
                 } catch (err) {
-                    t.llmobs.annotate({
-                        inputData: args as Record<string, unknown>,
-                        outputData: { error: err instanceof Error ? err.message : String(err) }
-                    });
+                    if (!redactIo) {
+                        t.llmobs.annotate({
+                            inputData: args as Record<string, unknown>,
+                            outputData: { error: err instanceof Error ? err.message : String(err) }
+                        });
+                    }
                     throw err;
                 }
             }
@@ -147,6 +167,11 @@ export async function traceTool<T>(
 /**
  * Wrap a Zendesk Help Center HTTP request. One span per logical request
  * (covers all retry attempts together).
+ *
+ * Privacy: when WEALTHSIMPLE_HELP_TELEMETRY_REDACT_URLS=true, the `http.url`
+ * tag is also stripped of its query string (path-only). The `resource` is
+ * always path-only for cardinality reasons. Search-term query strings
+ * therefore never appear in the span when redactUrls is on.
  */
 export async function traceZendeskRequest<T>(
     url: string,
@@ -155,12 +180,14 @@ export async function traceZendeskRequest<T>(
     const t = tracer;
     if (t === null) return handler();
 
+    const tagUrl = redactUrls ? stripQuery(url) : url;
+
     return t.trace(
         'wealthsimple_help_center.request',
         {
             resource: stripQuery(url),
             tags: {
-                'http.url': url,
+                'http.url': tagUrl,
                 'component': SERVICE_NAME
             }
         },

@@ -79,6 +79,8 @@ All configuration is via environment variables. Sensible defaults are provided.
 
 Telemetry is **off by default** and adds zero overhead unless explicitly enabled — `dd-trace` is bundled but lazy-loaded. Set either `DD_API_KEY` (for agentless) or `WEALTHSIMPLE_HELP_TELEMETRY_ENABLED=true` (when you have a local Datadog Agent) to turn it on.
 
+> **Read [Privacy & data tracking](#privacy--data-tracking) before turning telemetry on.** When LLM Observability is enabled, this MCP captures tool inputs (including free-text search queries) and outputs and ships them to Datadog. The default (off) sends nothing. Two opt-in redaction flags (`WEALTHSIMPLE_HELP_TELEMETRY_REDACT_IO`, `WEALTHSIMPLE_HELP_TELEMETRY_REDACT_URLS`) let you keep telemetry on without forwarding content.
+
 | Env var | Default | Description |
 | --- | --- | --- |
 | `WEALTHSIMPLE_HELP_TELEMETRY_ENABLED` | _(unset)_ | Set to `true` to initialize `dd-trace` (e.g. when running alongside a Datadog Agent on `localhost:8126`). |
@@ -91,8 +93,51 @@ Telemetry is **off by default** and adds zero overhead unless explicitly enabled
 | `DD_LLMOBS_ENABLED` | `false` | Set to `true` to enable LLM Observability spans. Each MCP tool call produces a `tool` span with `inputData` and `outputData` annotated. |
 | `DD_LLMOBS_ML_APP` | `wealthsimple-help-center-mcp` | Logical app name in LLM Obs (used to group related traces). Setting this also implicitly enables LLM Obs. |
 | `DD_LLMOBS_AGENTLESS_ENABLED` | `false` | Set to `true` to send LLM Obs spans directly to Datadog (skipping a local Agent). Requires `DD_API_KEY` and `DD_SITE`. |
+| `WEALTHSIMPLE_HELP_TELEMETRY_REDACT_IO` | `false` | Set to `true` to skip annotating `inputData` / `outputData` on tool spans. Span structure (name, latency, error status, throughput) is preserved; only the *content* is dropped. See [Privacy & data tracking](#privacy--data-tracking). |
+| `WEALTHSIMPLE_HELP_TELEMETRY_REDACT_URLS` | `false` | Set to `true` to strip query strings from the `http.url` tag on Zendesk request spans. Use alongside `_REDACT_IO` to remove *all* search-term content from telemetry. |
 
 Note: when an upstream agent that *also* runs Datadog calls this MCP server's tools, span context propagation through stdio MCP is not automatic — agent spans and these tool spans may appear as related but not strictly parented. To get a fully linked trace you need both sides instrumented and a context-propagating bridge in the MCP client.
+
+#### Privacy & data tracking
+
+When telemetry is on (and only then), this server sends data over the network to Datadog. Be deliberate about enabling it — what follows is the **full inventory** of what gets shipped, what does not, and how to redact further.
+
+**What is sent to Datadog (only when telemetry is on):**
+
+- **Per tool call** — tool name (e.g. `search_help_center`), latency, success/error status. With `DD_LLMOBS_ENABLED=true`, also:
+  - `inputData` — the **full arguments the upstream agent passed in**. For most tools (`list_categories`, `list_sections`, `get_article`, `browse_taxonomy`) this is just numeric/string IDs and is low-risk. For `search_help_center` it includes the **free-text query string**, which agents typically forward verbatim from a user prompt. **If your user types personal information into their agent — name, email, account number, government IDs, financial details — it can end up in this field.**
+  - `outputData` — the tool's response. Help Center articles are **public content** authored by Wealthsimple, so no Wealthsimple user PII flows out this way; the worst case is just a verbose article body.
+- **Per outbound Zendesk request** — full URL (including the search-term query string), HTTP status, retry count, latency.
+- **`dd-trace` defaults** — Node runtime metrics (CPU, RSS memory, GC, event-loop), process info (pid, hostname), error stack traces (which include local file paths from your machine).
+
+**What is NOT sent (and structurally cannot be):**
+
+- Any **Wealthsimple account data** — balances, holdings, transactions, KYC info, session tokens, identity documents. **This server only talks to the public, unauthenticated help center API.** It has no path to user-account endpoints; Wealthsimple PII is structurally out of reach.
+- Your `DD_API_KEY` — used by `dd-trace` for transport, never logged or serialized into spans.
+- The contents of `.env` as a file — only the env vars `dd-trace` and this module explicitly read are used.
+- Anything from other processes on your machine — telemetry instrumentation is scoped to this server's own code.
+
+**Where the data goes:**
+
+To the Datadog regional intake set in `DD_SITE` (e.g. `us5.datadoghq.com`). It is then governed by your [Datadog data retention and privacy settings](https://docs.datadoghq.com/data_security/). Data does **not** flow to Wealthsimple, to this project's maintainers, or to any other third party. Wealthsimple has no visibility into your telemetry — it's a separate channel.
+
+**Mitigations available:**
+
+| Knob | Effect |
+| --- | --- |
+| Leave telemetry off (default) | Nothing sent anywhere. |
+| `WEALTHSIMPLE_HELP_TELEMETRY_REDACT_IO=true` | Tool spans still emit (latency, error counts, throughput preserved) but `inputData` and `outputData` are **never annotated**. Recommended if your agent forwards free-text from external users. |
+| `WEALTHSIMPLE_HELP_TELEMETRY_REDACT_URLS=true` | Strips query strings from the `http.url` tag on Zendesk request spans. Path remains tagged for routing analysis; the search term is removed. |
+| `DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP=...` | Native `dd-trace` flag for finer-grained query-string redaction across all HTTP integrations. See the [`dd-trace` data security docs](https://docs.datadoghq.com/tracing/configure_data_security/). |
+| `DD_RUNTIME_METRICS_ENABLED=false` | Stop emitting Node runtime metrics (CPU/memory). Useful if you want zero machine fingerprinting. |
+
+**Recommended posture:**
+
+- **Solo / personal use** where you control every query → enabling telemetry with full IO capture is fine and gives the best signal.
+- **Shared device, team, or anyone-but-you typing the queries** → set `WEALTHSIMPLE_HELP_TELEMETRY_REDACT_IO=true` and `WEALTHSIMPLE_HELP_TELEMETRY_REDACT_URLS=true`. You still get latency, error rates, and throughput; you do not ship user content.
+- **Production / customer-facing deployment** → keep telemetry off, or run with both redaction flags **plus** a privacy review of `dd-trace`'s default capture set against your DPA / privacy policy. This project's authors have not done a formal DPIA — that is on the operator.
+
+This server does not, and is structurally unable to, send the Wealthsimple Help Center any of its telemetry data — telemetry is a separate channel to Datadog only.
 
 #### Local development with telemetry
 
