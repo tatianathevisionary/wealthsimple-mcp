@@ -58,6 +58,13 @@ export async function setupTelemetry(version: string): Promise<void> {
     if (process.env.DD_ENV !== undefined) {
         initOpts.env = process.env.DD_ENV;
     }
+    // Pass DD_SITE explicitly when set. Without this, dd-trace defaults to
+    // datadoghq.com (US1) for some integration paths even if DD_SITE is in
+    // env — agentless LLM Obs spans in particular need this to reach the
+    // correct regional intake (e.g. us5.datadoghq.com).
+    if (process.env.DD_SITE !== undefined) {
+        initOpts.site = process.env.DD_SITE;
+    }
     if (llmobsEnabled) {
         initOpts.llmobs = {
             mlApp: process.env.DD_LLMOBS_ML_APP ?? SERVICE_NAME,
