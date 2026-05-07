@@ -36,9 +36,10 @@ npm run dev         # tsx watch src/index.ts
 Single-process stdio MCP server. Layered, not framework-y:
 
 ```
-src/index.ts        ── entry: env config → HelpCenterClient → McpServer → StdioServerTransport
-src/tools.ts        ── 7 tool registrations (input + output Zod schemas, structuredContent)
-src/zendesk.ts      ── HelpCenterClient: typed fetch, retries, timeouts, cache, pagination
+src/index.ts        ── entry: env config → setupTelemetry → HelpCenterClient → McpServer → StdioServerTransport
+src/tools.ts        ── 7 tool registrations (input + output Zod schemas, structuredContent), each wrapped in traceTool()
+src/zendesk.ts      ── HelpCenterClient: typed fetch, retries, timeouts, cache, pagination, getJson wrapped in traceZendeskRequest()
+src/telemetry.ts    ── opt-in Datadog APM + LLM Obs (lazy-loaded dd-trace, no-op when disabled)
 src/schemas.ts      ── Zod schemas + inferred types for every Zendesk response shape
 src/cache.ts        ── TTL + LRU cache (no deps)
 src/html.ts         ── HTML → Markdown for article bodies (no deps)
@@ -48,6 +49,12 @@ src/html.ts         ── HTML → Markdown for article bodies (no deps)
 
 `zendesk.ts` is the only file that touches the network. `tools.ts` consumes typed domain objects; if a tool needs new data, extend the client and its schemas first, then the tool. Do not call `fetch` from `tools.ts` or `index.ts`.
 
+`telemetry.ts` is the only file that imports `dd-trace`. The rest of the codebase calls `traceTool()` / `traceZendeskRequest()`, which transparently degrade to a direct call when telemetry is off. If you need a new instrumentation point, add a wrapper in `telemetry.ts` rather than reaching into `dd-trace` from elsewhere.
+
+### stdio caveat for telemetry
+
+The MCP server speaks JSON-RPC over **stdout**. Anything that writes to stdout corrupts the protocol. `dd-trace` v5 logs to stderr by default — keep it that way. Never enable a tracer logger that targets stdout.
+
 ### Why every tool has an `outputSchema`
 
 MCP clients can render `structuredContent` with confidence when the tool ships a JSON Schema. Every tool returns both `content[]` (human-readable) and `structuredContent` (machine-readable). When adding a new tool, keep both — do not return only text.
@@ -55,7 +62,7 @@ MCP clients can render `structuredContent` with confidence when the tool ships a
 ## Code style
 
 - **TypeScript strict** is on. `Node16` resolution, ES modules, `.js` import extensions.
-- **No new runtime dependencies** without a strong reason. The whole server runs on Node ≥20 built-ins plus Zod plus `@modelcontextprotocol/sdk`. Adding `cheerio`, `axios`, `node-html-parser`, etc. is unnecessary and out of scope.
+- **No new runtime dependencies** without a strong reason. The runtime deps are Zod, `@modelcontextprotocol/sdk`, and (opt-in) `dd-trace` for Datadog APM + LLM Observability. Adding `cheerio`, `axios`, `node-html-parser`, etc. is unnecessary and out of scope.
 - **No `any`**. If a Zendesk response shape isn't covered, add it to `schemas.ts` first.
 - **Validate at the boundary**. Every Zendesk response goes through `schema.safeParse(...)` in `HelpCenterClient.getJson`. If parsing fails, throw a `HelpCenterError` with the URL — never return loosely-typed data to tools.
 - **Errors**: throw `HelpCenterError` for known-bad responses (with `status` and `url` set). The entry point catches and logs to stderr; do not `console.log` to stdout — stdio transport hijacks it.

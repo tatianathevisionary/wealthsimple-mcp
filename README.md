@@ -75,6 +75,25 @@ All configuration is via environment variables. Sensible defaults are provided.
 | `WEALTHSIMPLE_HELP_TIMEOUT_MS` | `15000` | Per-request timeout in ms. |
 | `WEALTHSIMPLE_HELP_CACHE_TTL_MS` | `1800000` (30 min) | Response cache TTL in ms. |
 
+### Optional: Datadog APM + LLM Observability
+
+Telemetry is **off by default** and adds zero overhead unless explicitly enabled — `dd-trace` is bundled but lazy-loaded. Set either `DD_API_KEY` (for agentless) or `WEALTHSIMPLE_HELP_TELEMETRY_ENABLED=true` (when you have a local Datadog Agent) to turn it on.
+
+| Env var | Default | Description |
+| --- | --- | --- |
+| `WEALTHSIMPLE_HELP_TELEMETRY_ENABLED` | _(unset)_ | Set to `true` to initialize `dd-trace` (e.g. when running alongside a Datadog Agent on `localhost:8126`). |
+| `DD_API_KEY` | _(unset)_ | If set, telemetry initializes automatically (typical for agentless mode). |
+| `DD_SITE` | `datadoghq.com` | Datadog site, e.g. `us5.datadoghq.com`, `datadoghq.eu`. |
+| `DD_SERVICE` | `wealthsimple-help-center-mcp` | Service name shown in Datadog. |
+| `DD_ENV` | _(unset)_ | Environment tag, e.g. `prod`, `staging`, `dev`. |
+| `DD_VERSION` | server version (`0.1.0`) | Version tag for deployments. |
+| `DD_RUNTIME_METRICS_ENABLED` | `true` | Set to `false` to disable Node runtime metrics. |
+| `DD_LLMOBS_ENABLED` | `false` | Set to `true` to enable LLM Observability spans. Each MCP tool call produces a `tool` span with `inputData` and `outputData` annotated. |
+| `DD_LLMOBS_ML_APP` | `wealthsimple-help-center-mcp` | Logical app name in LLM Obs (used to group related traces). Setting this also implicitly enables LLM Obs. |
+| `DD_LLMOBS_AGENTLESS_ENABLED` | `false` | Set to `true` to send LLM Obs spans directly to Datadog (skipping a local Agent). Requires `DD_API_KEY` and `DD_SITE`. |
+
+Note: when an upstream agent that *also* runs Datadog calls this MCP server's tools, span context propagation through stdio MCP is not automatic — agent spans and these tool spans may appear as related but not strictly parented. To get a fully linked trace you need both sides instrumented and a context-propagating bridge in the MCP client.
+
 ## Wiring into an MCP host
 
 After `npm run build`, point your MCP client config at the built entry script:
