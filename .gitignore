@@ -5,6 +5,11 @@ node_modules/
 *.log
 npm-debug.log*
 
+# Local environment config — never commit secrets (DD_API_KEY etc.)
+.env
+.env.*
+!.env.example
+
 # Local Claude Code tooling — not part of the MCP server
 .claude/
 

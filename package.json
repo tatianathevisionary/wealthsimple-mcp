@@ -30,7 +30,9 @@
     "scripts": {
         "build": "tsc",
         "start": "node build/index.js",
+        "start:telemetry": "node --env-file=.env build/index.js",
         "dev": "tsx watch src/index.ts",
+        "dev:telemetry": "tsx watch --env-file=.env src/index.ts",
         "typecheck": "tsc --noEmit",
         "prepublishOnly": "npm run build"
     },
