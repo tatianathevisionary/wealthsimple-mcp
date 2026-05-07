@@ -20,7 +20,8 @@ import {
 
 const DEFAULT_BASE = 'https://help.wealthsimple.com/api/v2/help_center';
 const DEFAULT_LOCALE = 'en-ca';
-const DEFAULT_USER_AGENT = 'wealthsimple-help-center-mcp/0.1 (+https://help.wealthsimple.com)';
+const DEFAULT_USER_AGENT =
+    'wealthsimple-help-center-mcp/0.1 (+https://github.com/tatianathevisionary/wealthsimple-mcp; unaffiliated community project)';
 
 export interface ZendeskClientOptions {
     baseUrl?: string;

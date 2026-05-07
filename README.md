@@ -2,6 +2,9 @@
 
 A standalone **Model Context Protocol** server that exposes the [Wealthsimple Help Center](https://help.wealthsimple.com/hc/en-ca) to AI agents. Built on `@modelcontextprotocol/sdk` and the public Zendesk Help Center JSON API — no scraping, no auth, fully typed responses.
 
+> **Independent, unofficial project.**
+> This is a community-built MCP integration. It is **not** built, endorsed, sponsored, or maintained by [Wealthsimple Technologies Inc.](https://www.wealthsimple.com) or [@wealthsimple](https://github.com/wealthsimple) on GitHub. "Wealthsimple", the help center, and all article content remain the property of Wealthsimple Technologies Inc.; this server only fetches and surfaces what their **public, unauthenticated** [Zendesk Help Center API](https://help.wealthsimple.com/api/v2/help_center/) chooses to return. For account-specific or product support, please contact Wealthsimple directly via their [official channels](https://help.wealthsimple.com/hc/en-ca/requests/new).
+
 ## Why this exists
 
 The Wealthsimple Help Center is the canonical source of truth for how Wealthsimple's products work — TFSA / RRSP / FHSA mechanics, transfer rules, fees, tax slips, supported countries, options trading, crypto, Cash, Trade, Invest, and more. Wiring an agent into the help center via this MCP server lets it answer Wealthsimple-related questions with cited, up-to-date, structured content rather than memorized snapshots.
@@ -68,7 +71,7 @@ All configuration is via environment variables. Sensible defaults are provided.
 | --- | --- | --- |
 | `WEALTHSIMPLE_HELP_BASE_URL` | `https://help.wealthsimple.com/api/v2/help_center` | Base URL for the Zendesk Help Center API. |
 | `WEALTHSIMPLE_HELP_LOCALE` | `en-ca` | Locale for category / section / article queries. |
-| `WEALTHSIMPLE_HELP_USER_AGENT` | `wealthsimple-help-center-mcp/0.1 (+https://help.wealthsimple.com)` | User-Agent header. |
+| `WEALTHSIMPLE_HELP_USER_AGENT` | `wealthsimple-help-center-mcp/0.1 (+https://github.com/tatianathevisionary/wealthsimple-mcp; unaffiliated community project)` | User-Agent header sent to the help center. Identifies the source as this project (not Wealthsimple itself), so the upstream operator can attribute traffic correctly. |
 | `WEALTHSIMPLE_HELP_TIMEOUT_MS` | `15000` | Per-request timeout in ms. |
 | `WEALTHSIMPLE_HELP_CACHE_TTL_MS` | `1800000` (30 min) | Response cache TTL in ms. |
 
@@ -98,3 +101,26 @@ claude mcp add wealthsimple-help-center -- node /absolute/path/to/wealthsimple-m
 - All endpoints used here are public and require no authentication.
 - Be a good citizen: keep the User-Agent identifiable, respect retry-after on 429 (the client already does this implicitly via backoff), and let the cache do its job.
 - The help center is bilingual; pass `WEALTHSIMPLE_HELP_LOCALE=fr` to target the French content set.
+
+## Acknowledgments
+
+This project sits on top of work done by others — credit where due:
+
+- **[Wealthsimple Technologies Inc.](https://www.wealthsimple.com)** ([@wealthsimple](https://github.com/wealthsimple)) — for publishing a comprehensive, well-organized [help center](https://help.wealthsimple.com/hc/en-ca) and exposing it through a stable, public Zendesk JSON API. **Every article this server returns is authored and maintained by their team.** This project is grateful for their open, well-documented public API and would not exist without it.
+- **[Anthropic](https://www.anthropic.com)** and the broader [Model Context Protocol](https://modelcontextprotocol.io) community — for the protocol spec and the [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) TypeScript SDK that this server is built on.
+- **[Zendesk](https://www.zendesk.com)** — for the [Help Center](https://developer.zendesk.com/api-reference/help_center/help-center-api/) platform whose public API this server consumes.
+- **[Datadog](https://www.datadoghq.com)** — for the [`dd-trace`](https://github.com/DataDog/dd-trace-js) Node SDK and the [LLM Observability](https://docs.datadoghq.com/llm_observability/) product used for optional telemetry.
+- **[Colin McDonnell](https://github.com/colinhacks)** — for [Zod](https://zod.dev), used at every Zendesk response boundary for runtime validation.
+
+### Trademarks
+
+"Wealthsimple" is a registered trademark of Wealthsimple Technologies Inc. All references in this repository are descriptive and nominative — used solely to indicate that this MCP server interfaces with Wealthsimple's public help center API. No affiliation, sponsorship, or endorsement by Wealthsimple Technologies Inc. is claimed or implied. "Datadog" and "Zendesk" are trademarks of their respective owners.
+
+### Reporting issues
+
+- Bugs in **this MCP server**, schema drift, missing tools → open an issue on this repo.
+- Anything about the **content** of a help center article, accuracy, or product behavior → contact Wealthsimple support directly via their [official help portal](https://help.wealthsimple.com/hc/en-ca/requests/new). This project does not modify or republish article text; it only fetches what the upstream public API returns.
+
+## License
+
+[MIT](./LICENSE) © contributors. Article content fetched from the Wealthsimple Help Center is © Wealthsimple Technologies Inc. and is *not* covered by this license — it is surfaced via their public API for use by tools that consume this server.

@@ -1,8 +1,17 @@
 {
     "name": "wealthsimple-help-center-mcp",
     "version": "0.1.0",
-    "description": "Standalone MCP server exposing the Wealthsimple Help Center (https://help.wealthsimple.com/hc/en-ca) to AI agents via the Zendesk Help Center API.",
+    "description": "Unofficial, community-built Model Context Protocol server that exposes the Wealthsimple Help Center (https://help.wealthsimple.com/hc/en-ca) to AI agents via the public Zendesk Help Center JSON API. Not affiliated with Wealthsimple Technologies Inc.",
     "license": "MIT",
+    "author": "Tatiana the Visionary (https://github.com/tatianathevisionary)",
+    "homepage": "https://github.com/tatianathevisionary/wealthsimple-mcp#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/tatianathevisionary/wealthsimple-mcp.git"
+    },
+    "bugs": {
+        "url": "https://github.com/tatianathevisionary/wealthsimple-mcp/issues"
+    },
     "type": "module",
     "main": "./build/index.js",
     "bin": {
