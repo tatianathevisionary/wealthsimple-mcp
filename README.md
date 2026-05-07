@@ -94,6 +94,39 @@ Telemetry is **off by default** and adds zero overhead unless explicitly enabled
 
 Note: when an upstream agent that *also* runs Datadog calls this MCP server's tools, span context propagation through stdio MCP is not automatic — agent spans and these tool spans may appear as related but not strictly parented. To get a fully linked trace you need both sides instrumented and a context-propagating bridge in the MCP client.
 
+#### Local development with telemetry
+
+For convenience, copy `.env.example` to `.env` and fill in your `DD_API_KEY`. Then:
+
+```sh
+npm run start:telemetry   # node --env-file=.env build/index.js
+npm run dev:telemetry     # tsx watch --env-file=.env src/index.ts
+```
+
+`.env` is gitignored. **Do not commit it.**
+
+#### Wiring telemetry into an MCP host config
+
+When you add this server to a Claude Desktop / Cursor / similar MCP config, pass the same env vars in the `env` block of that server entry:
+
+```json
+{
+  "mcpServers": {
+    "wealthsimple-help-center": {
+      "command": "node",
+      "args": ["/absolute/path/to/wealthsimple-mcp/build/index.js"],
+      "env": {
+        "DD_API_KEY": "...",
+        "DD_SITE": "us5.datadoghq.com",
+        "DD_LLMOBS_ENABLED": "true",
+        "DD_LLMOBS_AGENTLESS_ENABLED": "true",
+        "DD_LLMOBS_ML_APP": "wealthsimple-help-center-mcp"
+      }
+    }
+  }
+}
+```
+
 ## Wiring into an MCP host
 
 After `npm run build`, point your MCP client config at the built entry script:
