@@ -1,0 +1,45 @@
+{
+    "name": "wealthsimple-help-center-mcp",
+    "version": "0.1.0",
+    "description": "Standalone MCP server exposing the Wealthsimple Help Center (https://help.wealthsimple.com/hc/en-ca) to AI agents via the Zendesk Help Center API.",
+    "license": "MIT",
+    "type": "module",
+    "main": "./build/index.js",
+    "bin": {
+        "wealthsimple-help-center-mcp": "./build/index.js"
+    },
+    "files": [
+        "build",
+        "src",
+        "README.md",
+        "CLAUDE.md",
+        "LICENSE"
+    ],
+    "engines": {
+        "node": ">=20"
+    },
+    "scripts": {
+        "build": "tsc",
+        "start": "node build/index.js",
+        "dev": "tsx watch src/index.ts",
+        "typecheck": "tsc --noEmit",
+        "prepublishOnly": "npm run build"
+    },
+    "keywords": [
+        "mcp",
+        "modelcontextprotocol",
+        "wealthsimple",
+        "help-center",
+        "zendesk",
+        "ai-agent"
+    ],
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "zod": "^4.4.3"
+    },
+    "devDependencies": {
+        "@types/node": "^24.10.1",
+        "tsx": "^4.20.4",
+        "typescript": "^5.9.3"
+    }
+}

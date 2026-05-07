@@ -1,0 +1,12 @@
+build/
+node_modules/
+*.tsbuildinfo
+.DS_Store
+*.log
+npm-debug.log*
+
+# Local Claude Code tooling — not part of the MCP server
+.claude/
+
+# Don't ship the local SDK clone
+typescript-sdk/
