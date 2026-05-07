@@ -66,6 +66,27 @@ export async function setupTelemetry(version: string): Promise<void> {
     }
 
     tracer = ddTrace.default.init(initOpts);
+
+    process.stderr.write(
+        `[telemetry] dd-trace initialized (service=${initOpts.service}, llmobs=${llmobsEnabled})\n`
+    );
+
+    process.on('beforeExit', flushTelemetry);
+}
+
+/**
+ * Flush any buffered spans before the process exits. Safe to call when
+ * telemetry is off (no-op).
+ */
+export function flushTelemetry(): void {
+    const t = tracer;
+    if (t === null) return;
+    try {
+        if (llmobsEnabled) t.llmobs.flush();
+    } catch {
+        // best-effort flush; nothing useful to do on error.
+        // APM spans are flushed automatically by dd-trace on process exit.
+    }
 }
 
 /**
