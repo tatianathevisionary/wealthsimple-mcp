@@ -1,0 +1,44 @@
+MIT License
+
+Copyright (c) 2026 Tatiana the Visionary (https://github.com/tatianathevisionary)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+
+NOTICE
+
+This MIT license covers the *code* in this repository (the MCP server itself).
+It does NOT cover, grant, or affect any rights in:
+
+  - The Wealthsimple Help Center content fetched at runtime through the
+    public Zendesk Help Center API. All article text, titles, taxonomy, and
+    other content remain the property of Wealthsimple Technologies Inc. and
+    are returned by this software in unmodified form, sourced live from
+    https://help.wealthsimple.com — they are NOT redistributed, cached, or
+    bundled by this project.
+
+  - Any trademarks of Wealthsimple Technologies Inc. (including the name
+    "Wealthsimple" itself), Datadog, Inc., Zendesk, Inc., Anthropic, PBC, or
+    other third parties referenced in this repository. All references to
+    these names are descriptive and nominative, used solely to indicate
+    interoperability or attribution.
+
+This project is not built, sponsored, endorsed, or maintained by Wealthsimple
+Technologies Inc.
