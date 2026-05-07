@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { setupTelemetry } from './telemetry.js';
 import { registerTools } from './tools.js';
 import { HelpCenterClient, HelpCenterError } from './zendesk.js';
 
@@ -18,6 +19,8 @@ function readNumberEnv(name: string): number | undefined {
 }
 
 async function main(): Promise<void> {
+    await setupTelemetry(SERVER_VERSION);
+
     const timeoutMs = readNumberEnv('WEALTHSIMPLE_HELP_TIMEOUT_MS');
     const cacheTtlMs = readNumberEnv('WEALTHSIMPLE_HELP_CACHE_TTL_MS');
 

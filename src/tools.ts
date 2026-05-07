@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { htmlToMarkdown } from './html.js';
+import { traceTool } from './telemetry.js';
 import { HelpCenterClient, HelpCenterError } from './zendesk.js';
 
 const HELP_CENTER_DOMAIN = 'help.wealthsimple.com';
@@ -67,25 +68,26 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 )
             }
         },
-        async ({ query, limit }) => {
-            const max = limit ?? 10;
-            const hits = await client.search(query, max);
-            const results = hits.map(h => ({
-                id: h.id,
-                title: h.title,
-                url: h.html_url,
-                section_id: h.section_id ?? null,
-                locale: h.locale,
-                labels: h.label_names ?? [],
-                updated_at: h.updated_at,
-                snippet: stripTags(h.snippet ?? '').slice(0, 400)
-            }));
-            const structured = { query, count: results.length, results };
-            return {
-                content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
-                structuredContent: structured
-            };
-        }
+        async ({ query, limit }) =>
+            traceTool('search_help_center', { query, limit }, async () => {
+                const max = limit ?? 10;
+                const hits = await client.search(query, max);
+                const results = hits.map(h => ({
+                    id: h.id,
+                    title: h.title,
+                    url: h.html_url,
+                    section_id: h.section_id ?? null,
+                    locale: h.locale,
+                    labels: h.label_names ?? [],
+                    updated_at: h.updated_at,
+                    snippet: stripTags(h.snippet ?? '').slice(0, 400)
+                }));
+                const structured = { query, count: results.length, results };
+                return {
+                    content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
+                    structuredContent: structured
+                };
+            })
     );
 
     server.registerTool(
@@ -100,21 +102,22 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 categories: z.array(categorySummarySchema)
             }
         },
-        async () => {
-            const categories = await client.listCategories();
-            const summaries = categories.map(c => ({
-                id: c.id,
-                name: c.name,
-                description: c.description ?? '',
-                url: c.html_url,
-                locale: c.locale
-            }));
-            const structured = { count: summaries.length, categories: summaries };
-            return {
-                content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
-                structuredContent: structured
-            };
-        }
+        async () =>
+            traceTool('list_categories', {}, async () => {
+                const categories = await client.listCategories();
+                const summaries = categories.map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    description: c.description ?? '',
+                    url: c.html_url,
+                    locale: c.locale
+                }));
+                const structured = { count: summaries.length, categories: summaries };
+                return {
+                    content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
+                    structuredContent: structured
+                };
+            })
     );
 
     server.registerTool(
@@ -135,22 +138,23 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 sections: z.array(sectionSummarySchema)
             }
         },
-        async ({ category_id }) => {
-            const sections = await client.listSections(category_id);
-            const summaries = sections.map(s => ({
-                id: s.id,
-                name: s.name,
-                description: s.description ?? '',
-                category_id: s.category_id,
-                url: s.html_url,
-                locale: s.locale
-            }));
-            const structured = { count: summaries.length, sections: summaries };
-            return {
-                content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
-                structuredContent: structured
-            };
-        }
+        async ({ category_id }) =>
+            traceTool('list_sections', { category_id }, async () => {
+                const sections = await client.listSections(category_id);
+                const summaries = sections.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    description: s.description ?? '',
+                    category_id: s.category_id,
+                    url: s.html_url,
+                    locale: s.locale
+                }));
+                const structured = { count: summaries.length, sections: summaries };
+                return {
+                    content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
+                    structuredContent: structured
+                };
+            })
     );
 
     server.registerTool(
@@ -175,23 +179,24 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 articles: z.array(articleSummarySchema)
             }
         },
-        async ({ section_id, limit }) => {
-            const articles = await client.listArticles(section_id, limit ?? 50);
-            const summaries = articles.map(a => ({
-                id: a.id,
-                title: a.title,
-                url: a.html_url,
-                section_id: a.section_id ?? section_id,
-                locale: a.locale,
-                labels: a.label_names ?? [],
-                updated_at: a.updated_at
-            }));
-            const structured = { section_id, count: summaries.length, articles: summaries };
-            return {
-                content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
-                structuredContent: structured
-            };
-        }
+        async ({ section_id, limit }) =>
+            traceTool('list_articles', { section_id, limit }, async () => {
+                const articles = await client.listArticles(section_id, limit ?? 50);
+                const summaries = articles.map(a => ({
+                    id: a.id,
+                    title: a.title,
+                    url: a.html_url,
+                    section_id: a.section_id ?? section_id,
+                    locale: a.locale,
+                    labels: a.label_names ?? [],
+                    updated_at: a.updated_at
+                }));
+                const structured = { section_id, count: summaries.length, articles: summaries };
+                return {
+                    content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
+                    structuredContent: structured
+                };
+            })
     );
 
     server.registerTool(
@@ -219,28 +224,29 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 body: z.string()
             }
         },
-        async ({ article_id, format }) => {
-            const fmt = format ?? 'markdown';
-            const article = await client.getArticle(article_id);
-            const rawBody = article.body ?? '';
-            const body =
-                fmt === 'html' ? rawBody : fmt === 'text' ? stripTags(rawBody).trim() : htmlToMarkdown(rawBody);
-            const structured = {
-                id: article.id,
-                title: article.title,
-                url: article.html_url,
-                section_id: article.section_id ?? null,
-                locale: article.locale,
-                labels: article.label_names ?? [],
-                updated_at: article.updated_at,
-                format: fmt,
-                body
-            };
-            return {
-                content: [{ type: 'text', text: body }],
-                structuredContent: structured
-            };
-        }
+        async ({ article_id, format }) =>
+            traceTool('get_article', { article_id, format }, async () => {
+                const fmt = format ?? 'markdown';
+                const article = await client.getArticle(article_id);
+                const rawBody = article.body ?? '';
+                const body =
+                    fmt === 'html' ? rawBody : fmt === 'text' ? stripTags(rawBody).trim() : htmlToMarkdown(rawBody);
+                const structured = {
+                    id: article.id,
+                    title: article.title,
+                    url: article.html_url,
+                    section_id: article.section_id ?? null,
+                    locale: article.locale,
+                    labels: article.label_names ?? [],
+                    updated_at: article.updated_at,
+                    format: fmt,
+                    body
+                };
+                return {
+                    content: [{ type: 'text', text: body }],
+                    structuredContent: structured
+                };
+            })
     );
 
     server.registerTool(
@@ -261,33 +267,34 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 body: z.string()
             }
         },
-        async ({ url, format }) => {
-            let parsed: URL;
-            try {
-                parsed = new URL(url);
-            } catch {
-                throw new HelpCenterError(`Invalid URL: ${url}`);
-            }
-            if (!parsed.hostname.endsWith(HELP_CENTER_DOMAIN)) {
-                throw new HelpCenterError(
-                    `URL host ${parsed.hostname} is not a Wealthsimple Help Center URL (expected *.${HELP_CENTER_DOMAIN}).`
-                );
-            }
-            const id = HelpCenterClient.parseArticleIdFromUrl(parsed.pathname);
-            if (id === null) {
-                throw new HelpCenterError(`Could not extract an article ID from ${url}.`);
-            }
-            const fmt = format ?? 'markdown';
-            const article = await client.getArticle(id);
-            const rawBody = article.body ?? '';
-            const body =
-                fmt === 'html' ? rawBody : fmt === 'text' ? stripTags(rawBody).trim() : htmlToMarkdown(rawBody);
-            const structured = { id: article.id, title: article.title, url: article.html_url, format: fmt, body };
-            return {
-                content: [{ type: 'text', text: body }],
-                structuredContent: structured
-            };
-        }
+        async ({ url, format }) =>
+            traceTool('resolve_help_url', { url, format }, async () => {
+                let parsed: URL;
+                try {
+                    parsed = new URL(url);
+                } catch {
+                    throw new HelpCenterError(`Invalid URL: ${url}`);
+                }
+                if (!parsed.hostname.endsWith(HELP_CENTER_DOMAIN)) {
+                    throw new HelpCenterError(
+                        `URL host ${parsed.hostname} is not a Wealthsimple Help Center URL (expected *.${HELP_CENTER_DOMAIN}).`
+                    );
+                }
+                const id = HelpCenterClient.parseArticleIdFromUrl(parsed.pathname);
+                if (id === null) {
+                    throw new HelpCenterError(`Could not extract an article ID from ${url}.`);
+                }
+                const fmt = format ?? 'markdown';
+                const article = await client.getArticle(id);
+                const rawBody = article.body ?? '';
+                const body =
+                    fmt === 'html' ? rawBody : fmt === 'text' ? stripTags(rawBody).trim() : htmlToMarkdown(rawBody);
+                const structured = { id: article.id, title: article.title, url: article.html_url, format: fmt, body };
+                return {
+                    content: [{ type: 'text', text: body }],
+                    structuredContent: structured
+                };
+            })
     );
 
     server.registerTool(
@@ -331,62 +338,63 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 )
             }
         },
-        async ({ include_articles, articles_per_section }) => {
-            const includeArticles = include_articles ?? true;
-            const perSection = articles_per_section ?? 50;
-            const [categories, allSections] = await Promise.all([client.listCategories(), client.listSections()]);
-            const sectionsByCategory = new Map<number, typeof allSections>();
-            for (const s of allSections) {
-                const list = sectionsByCategory.get(s.category_id) ?? [];
-                list.push(s);
-                sectionsByCategory.set(s.category_id, list);
-            }
+        async ({ include_articles, articles_per_section }) =>
+            traceTool('browse_taxonomy', { include_articles, articles_per_section }, async () => {
+                const includeArticles = include_articles ?? true;
+                const perSection = articles_per_section ?? 50;
+                const [categories, allSections] = await Promise.all([client.listCategories(), client.listSections()]);
+                const sectionsByCategory = new Map<number, typeof allSections>();
+                for (const s of allSections) {
+                    const list = sectionsByCategory.get(s.category_id) ?? [];
+                    list.push(s);
+                    sectionsByCategory.set(s.category_id, list);
+                }
 
-            let articleCount = 0;
-            const tree = await Promise.all(
-                categories.map(async c => {
-                    const sections = sectionsByCategory.get(c.id) ?? [];
-                    const sectionPayloads = await Promise.all(
-                        sections.map(async s => {
-                            const articles = includeArticles ? await client.listArticles(s.id, perSection) : [];
-                            articleCount += articles.length;
-                            return {
-                                id: s.id,
-                                name: s.name,
-                                description: s.description ?? '',
-                                category_id: s.category_id,
-                                url: s.html_url,
-                                locale: s.locale,
-                                articles: articles.map(a => ({
-                                    id: a.id,
-                                    title: a.title,
-                                    url: a.html_url,
-                                    updated_at: a.updated_at
-                                }))
-                            };
-                        })
-                    );
-                    return {
-                        id: c.id,
-                        name: c.name,
-                        description: c.description ?? '',
-                        url: c.html_url,
-                        locale: c.locale,
-                        sections: sectionPayloads
-                    };
-                })
-            );
-            const structured = {
-                category_count: categories.length,
-                section_count: allSections.length,
-                article_count: articleCount,
-                categories: tree
-            };
-            return {
-                content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
-                structuredContent: structured
-            };
-        }
+                let articleCount = 0;
+                const tree = await Promise.all(
+                    categories.map(async c => {
+                        const sections = sectionsByCategory.get(c.id) ?? [];
+                        const sectionPayloads = await Promise.all(
+                            sections.map(async s => {
+                                const articles = includeArticles ? await client.listArticles(s.id, perSection) : [];
+                                articleCount += articles.length;
+                                return {
+                                    id: s.id,
+                                    name: s.name,
+                                    description: s.description ?? '',
+                                    category_id: s.category_id,
+                                    url: s.html_url,
+                                    locale: s.locale,
+                                    articles: articles.map(a => ({
+                                        id: a.id,
+                                        title: a.title,
+                                        url: a.html_url,
+                                        updated_at: a.updated_at
+                                    }))
+                                };
+                            })
+                        );
+                        return {
+                            id: c.id,
+                            name: c.name,
+                            description: c.description ?? '',
+                            url: c.html_url,
+                            locale: c.locale,
+                            sections: sectionPayloads
+                        };
+                    })
+                );
+                const structured = {
+                    category_count: categories.length,
+                    section_count: allSections.length,
+                    article_count: articleCount,
+                    categories: tree
+                };
+                return {
+                    content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
+                    structuredContent: structured
+                };
+            })
     );
 }
 

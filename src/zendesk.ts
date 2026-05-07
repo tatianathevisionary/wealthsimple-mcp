@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TtlCache } from './cache.js';
+import { traceZendeskRequest } from './telemetry.js';
 import {
     ArticleEnvelopeSchema,
     ArticlesPageSchema,
@@ -182,18 +183,20 @@ export class HelpCenterClient {
         const url = path.startsWith('http') ? path : `${this.baseUrl}${path}`;
         const cached = this.cache.get(url);
         if (cached !== undefined) return cached as z.infer<S>;
-        const raw = await this.fetchWithRetry(url);
-        const parsed = schema.safeParse(raw);
-        if (!parsed.success) {
-            throw new HelpCenterError(
-                `Help Center response failed schema validation for ${url}: ${parsed.error.message}`,
-                undefined,
-                url,
-                parsed.error
-            );
-        }
-        this.cache.set(url, parsed.data);
-        return parsed.data;
+        return traceZendeskRequest(url, async () => {
+            const raw = await this.fetchWithRetry(url);
+            const parsed = schema.safeParse(raw);
+            if (!parsed.success) {
+                throw new HelpCenterError(
+                    `Help Center response failed schema validation for ${url}: ${parsed.error.message}`,
+                    undefined,
+                    url,
+                    parsed.error
+                );
+            }
+            this.cache.set(url, parsed.data);
+            return parsed.data;
+        });
     }
 
     private async fetchWithRetry(url: string): Promise<unknown> {
