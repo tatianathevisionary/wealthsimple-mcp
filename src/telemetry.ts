@@ -31,12 +31,17 @@ export function isTelemetryEnabled(): boolean {
     return tracer !== null;
 }
 
-export function isLlmObsEnabled(): boolean {
-    return llmobsEnabled;
-}
-
-export function isIoRedacted(): boolean {
-    return redactIo;
+/**
+ * Normalize an arbitrary value into the `Record<string, unknown>` shape that
+ * the LLM Obs annotate API expects. Plain objects pass through; anything else
+ * (primitives, arrays, null) is wrapped under a `value` key so we never feed a
+ * non-object to the tracer or rely on an unchecked cast.
+ */
+function toAnnotationData(value: unknown): Record<string, unknown> {
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        return value as Record<string, unknown>;
+    }
+    return { value };
 }
 
 /**
@@ -51,9 +56,7 @@ export async function setupTelemetry(version: string): Promise<void> {
     const hasApiKey = Boolean(process.env.DD_API_KEY);
     if (!explicit && !hasApiKey) return;
 
-    llmobsEnabled =
-        process.env.DD_LLMOBS_ENABLED === 'true' ||
-        process.env.DD_LLMOBS_ML_APP !== undefined;
+    llmobsEnabled = process.env.DD_LLMOBS_ENABLED === 'true' || process.env.DD_LLMOBS_ML_APP !== undefined;
 
     redactIo = process.env.WEALTHSIMPLE_HELP_TELEMETRY_REDACT_IO === 'true';
     redactUrls = process.env.WEALTHSIMPLE_HELP_TELEMETRY_REDACT_URLS === 'true';
@@ -117,38 +120,31 @@ export function flushTelemetry(): void {
  * annotate inputData / outputData. The free-text search query and the article
  * payload never leave the process. The span name + tool name are still tagged.
  */
-export async function traceTool<T>(
-    toolName: string,
-    args: unknown,
-    handler: () => Promise<T>
-): Promise<T> {
+export async function traceTool<T>(toolName: string, args: unknown, handler: () => Promise<T>): Promise<T> {
     const t = tracer;
     if (t === null) return handler();
 
     if (llmobsEnabled) {
-        return t.llmobs.trace(
-            { kind: 'tool', name: toolName },
-            async () => {
-                try {
-                    const result = await handler();
-                    if (!redactIo) {
-                        t.llmobs.annotate({
-                            inputData: args as Record<string, unknown>,
-                            outputData: result as Record<string, unknown>
-                        });
-                    }
-                    return result;
-                } catch (err) {
-                    if (!redactIo) {
-                        t.llmobs.annotate({
-                            inputData: args as Record<string, unknown>,
-                            outputData: { error: err instanceof Error ? err.message : String(err) }
-                        });
-                    }
-                    throw err;
+        return t.llmobs.trace({ kind: 'tool', name: toolName }, async () => {
+            try {
+                const result = await handler();
+                if (!redactIo) {
+                    t.llmobs.annotate({
+                        inputData: toAnnotationData(args),
+                        outputData: toAnnotationData(result)
+                    });
                 }
+                return result;
+            } catch (err) {
+                if (!redactIo) {
+                    t.llmobs.annotate({
+                        inputData: toAnnotationData(args),
+                        outputData: { error: err instanceof Error ? err.message : String(err) }
+                    });
+                }
+                throw err;
             }
-        );
+        });
     }
 
     return t.trace(
@@ -157,7 +153,7 @@ export async function traceTool<T>(
             resource: toolName,
             tags: {
                 'mcp.tool.name': toolName,
-                'component': SERVICE_NAME
+                component: SERVICE_NAME
             }
         },
         async () => handler()
@@ -173,10 +169,7 @@ export async function traceTool<T>(
  * always path-only for cardinality reasons. Search-term query strings
  * therefore never appear in the span when redactUrls is on.
  */
-export async function traceZendeskRequest<T>(
-    url: string,
-    handler: () => Promise<T>
-): Promise<T> {
+export async function traceZendeskRequest<T>(url: string, handler: () => Promise<T>): Promise<T> {
     const t = tracer;
     if (t === null) return handler();
 
@@ -188,7 +181,7 @@ export async function traceZendeskRequest<T>(
             resource: stripQuery(url),
             tags: {
                 'http.url': tagUrl,
-                'component': SERVICE_NAME
+                component: SERVICE_NAME
             }
         },
         async () => handler()

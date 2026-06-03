@@ -13,7 +13,9 @@ function readNumberEnv(name: string): number | undefined {
     if (raw === undefined) return undefined;
     const value = Number(raw);
     if (!Number.isFinite(value) || value <= 0) {
-        throw new Error(`Environment variable ${name} must be a positive finite number; got ${JSON.stringify(raw)}`);
+        throw new Error(
+            `Environment variable ${name} must be a positive finite number; got ${JSON.stringify(raw)}`
+        );
     }
     return value;
 }
@@ -25,9 +27,15 @@ async function main(): Promise<void> {
     const cacheTtlMs = readNumberEnv('WEALTHSIMPLE_HELP_CACHE_TTL_MS');
 
     const client = new HelpCenterClient({
-        ...(process.env.WEALTHSIMPLE_HELP_BASE_URL !== undefined && { baseUrl: process.env.WEALTHSIMPLE_HELP_BASE_URL }),
-        ...(process.env.WEALTHSIMPLE_HELP_LOCALE !== undefined && { locale: process.env.WEALTHSIMPLE_HELP_LOCALE }),
-        ...(process.env.WEALTHSIMPLE_HELP_USER_AGENT !== undefined && { userAgent: process.env.WEALTHSIMPLE_HELP_USER_AGENT }),
+        ...(process.env.WEALTHSIMPLE_HELP_BASE_URL !== undefined && {
+            baseUrl: process.env.WEALTHSIMPLE_HELP_BASE_URL
+        }),
+        ...(process.env.WEALTHSIMPLE_HELP_LOCALE !== undefined && {
+            locale: process.env.WEALTHSIMPLE_HELP_LOCALE
+        }),
+        ...(process.env.WEALTHSIMPLE_HELP_USER_AGENT !== undefined && {
+            userAgent: process.env.WEALTHSIMPLE_HELP_USER_AGENT
+        }),
         ...(timeoutMs !== undefined && { requestTimeoutMs: timeoutMs }),
         ...(cacheTtlMs !== undefined && { cacheTtlMs })
     });
@@ -47,7 +55,7 @@ async function main(): Promise<void> {
     console.error(`${SERVER_NAME}@${SERVER_VERSION} running on stdio`);
 }
 
-main().catch(err => {
+main().catch((err) => {
     if (err instanceof HelpCenterError) {
         console.error(`[wealthsimple-help-center] ${err.message}`);
     } else {

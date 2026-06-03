@@ -51,8 +51,9 @@ export function htmlToMarkdown(html: string): string {
     body = body.replace(/<br\s*\/?>(?!\n)/gi, '\n');
 
     // Block quotes.
-    body = body.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_, inner: string) =>
-        `\n\n> ${stripInline(inner).replace(/\n/g, '\n> ')}\n\n`
+    body = body.replace(
+        /<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi,
+        (_, inner: string) => `\n\n> ${stripInline(inner).replace(/\n/g, '\n> ')}\n\n`
     );
 
     // Anything else: strip remaining tags but keep link hrefs and inline emphasis.
@@ -63,12 +64,19 @@ export function htmlToMarkdown(html: string): string {
 
 function stripInline(html: string): string {
     let text = html;
+    // Line breaks -> newline. Handled here (not only at the block level) so a
+    // <br> nested inside a <p>/<li>/heading survives, since those block rules
+    // run stripInline on their inner content before the body-level pass.
+    text = text.replace(/<br\s*\/?>/gi, '\n');
     // Markdown links [text](href)
-    text = text.replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, label: string) => {
-        const cleanLabel = stripAllTags(label).trim();
-        if (!cleanLabel) return href;
-        return `[${cleanLabel}](${href})`;
-    });
+    text = text.replace(
+        /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
+        (_, href: string, label: string) => {
+            const cleanLabel = stripAllTags(label).trim();
+            if (!cleanLabel) return href;
+            return `[${cleanLabel}](${href})`;
+        }
+    );
     // Bold / emphasis.
     text = text.replace(/<\/?(strong|b)\b[^>]*>/gi, '**');
     text = text.replace(/<\/?(em|i)\b[^>]*>/gi, '*');
@@ -81,5 +89,8 @@ function stripAllTags(html: string): string {
 }
 
 function collapseWhitespace(input: string): string {
-    return input.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ');
+    return input
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/[ \t]{2,}/g, ' ');
 }

@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
-const isoDateTime = z.string();
+// Zendesk timestamps are ISO-8601 datetimes, but we keep the validation
+// permissive (plain string) so a format drift on Zendesk's side never breaks
+// retrieval. Named to reflect what it actually is.
+const dateTimeString = z.string();
 
 export const CategorySchema = z.object({
     id: z.number().int(),
@@ -9,8 +12,8 @@ export const CategorySchema = z.object({
     locale: z.string(),
     html_url: z.string().url(),
     position: z.number().int().optional(),
-    created_at: isoDateTime,
-    updated_at: isoDateTime,
+    created_at: dateTimeString,
+    updated_at: dateTimeString,
     outdated: z.boolean().optional()
 });
 export type Category = z.infer<typeof CategorySchema>;
@@ -24,8 +27,8 @@ export const SectionSchema = z.object({
     html_url: z.string().url(),
     parent_section_id: z.number().int().nullable().optional(),
     position: z.number().int().optional(),
-    created_at: isoDateTime,
-    updated_at: isoDateTime,
+    created_at: dateTimeString,
+    updated_at: dateTimeString,
     outdated: z.boolean().optional()
 });
 export type Section = z.infer<typeof SectionSchema>;
@@ -44,9 +47,9 @@ export const ArticleSchema = z.object({
     vote_sum: z.number().int().optional(),
     vote_count: z.number().int().optional(),
     label_names: z.array(z.string()).default([]),
-    created_at: isoDateTime,
-    updated_at: isoDateTime,
-    edited_at: isoDateTime.optional(),
+    created_at: dateTimeString,
+    updated_at: dateTimeString,
+    edited_at: dateTimeString.optional(),
     outdated: z.boolean().optional()
 });
 export type Article = z.infer<typeof ArticleSchema>;
@@ -89,5 +92,3 @@ export const SearchPageSchema = PaginationSchema.extend({
 export type SearchPage = z.infer<typeof SearchPageSchema>;
 
 export const ArticleEnvelopeSchema = z.object({ article: ArticleSchema });
-export const CategoryEnvelopeSchema = z.object({ category: CategorySchema });
-export const SectionEnvelopeSchema = z.object({ section: SectionSchema });
