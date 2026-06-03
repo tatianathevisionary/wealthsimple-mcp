@@ -1,23 +1,21 @@
-import { z } from 'zod';
+import type { z } from 'zod';
 import { TtlCache } from './cache.js';
-import { traceZendeskRequest } from './telemetry.js';
 import {
-    ArticleEnvelopeSchema,
-    ArticlesPageSchema,
-    CategoriesPageSchema,
-    CategoryEnvelopeSchema,
-    SearchPageSchema,
-    SectionEnvelopeSchema,
-    SectionsPageSchema,
     type Article,
+    ArticleEnvelopeSchema,
     type ArticleSearchHit,
     type ArticlesPage,
+    ArticlesPageSchema,
     type CategoriesPage,
+    CategoriesPageSchema,
     type Category,
     type Pagination,
+    SearchPageSchema,
     type Section,
-    type SectionsPage
+    type SectionsPage,
+    SectionsPageSchema
 } from './schemas.js';
+import { traceZendeskRequest } from './telemetry.js';
 
 const DEFAULT_BASE = 'https://help.wealthsimple.com/api/v2/help_center';
 const DEFAULT_LOCALE = 'en-ca';
@@ -104,27 +102,8 @@ export class HelpCenterClient {
     }
 
     async getArticle(articleId: number): Promise<Article> {
-        const data = await this.getJson(
-            `/${this.locale}/articles/${articleId}.json`,
-            ArticleEnvelopeSchema
-        );
+        const data = await this.getJson(`/${this.locale}/articles/${articleId}.json`, ArticleEnvelopeSchema);
         return data.article;
-    }
-
-    async getCategory(categoryId: number): Promise<Category> {
-        const data = await this.getJson(
-            `/${this.locale}/categories/${categoryId}.json`,
-            CategoryEnvelopeSchema
-        );
-        return data.category;
-    }
-
-    async getSection(sectionId: number): Promise<Section> {
-        const data = await this.getJson(
-            `/${this.locale}/sections/${sectionId}.json`,
-            SectionEnvelopeSchema
-        );
-        return data.section;
     }
 
     async search(query: string, limit = 25): Promise<ArticleSearchHit[]> {
@@ -172,7 +151,7 @@ export class HelpCenterClient {
                 return items.slice(0, limit);
             }
             nextUrl = page.next_page;
-            if (nextUrl && nextUrl.startsWith(this.baseUrl)) {
+            if (nextUrl?.startsWith(this.baseUrl)) {
                 nextUrl = nextUrl.slice(this.baseUrl.length);
             }
         }
@@ -229,7 +208,12 @@ export class HelpCenterClient {
                 }
                 lastError = new HelpCenterError(`Retryable status ${res.status}`, res.status, url);
             } catch (err) {
-                if (err instanceof HelpCenterError && err.status === 404) throw err;
+                // Surface non-retryable HTTP errors (e.g. 404, 400) immediately
+                // rather than re-entering the backoff loop. Only transient
+                // failures (network errors, retryable statuses) fall through.
+                if (err instanceof HelpCenterError && err.status !== undefined && !isRetryable(err.status)) {
+                    throw err;
+                }
                 lastError = err;
                 if (attempt === this.maxRetries) break;
             } finally {
@@ -254,5 +238,5 @@ function isRetryable(status: number): boolean {
 }
 
 function delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }

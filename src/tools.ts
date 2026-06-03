@@ -1,10 +1,71 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { htmlToMarkdown } from './html.js';
+import type { Article } from './schemas.js';
 import { traceTool } from './telemetry.js';
 import { HelpCenterClient, HelpCenterError } from './zendesk.js';
 
 const HELP_CENTER_DOMAIN = 'help.wealthsimple.com';
+
+type ArticleFormat = 'markdown' | 'html' | 'text';
+
+interface ArticleStructured {
+    [key: string]: unknown;
+    id: number;
+    title: string;
+    url: string;
+    section_id: number | null;
+    locale: string;
+    labels: string[];
+    updated_at: string;
+    format: ArticleFormat;
+    body: string;
+}
+
+/**
+ * Render a fetched article into the canonical structured payload shared by
+ * `get_article` and `resolve_help_url`. Centralizes body formatting so the two
+ * tools never drift.
+ */
+function toArticleStructured(article: Article, format: ArticleFormat): ArticleStructured {
+    const rawBody = article.body ?? '';
+    const body =
+        format === 'html' ? rawBody : format === 'text' ? stripTags(rawBody).trim() : htmlToMarkdown(rawBody);
+    return {
+        id: article.id,
+        title: article.title,
+        url: article.html_url,
+        section_id: article.section_id ?? null,
+        locale: article.locale,
+        labels: article.label_names ?? [],
+        updated_at: article.updated_at,
+        format,
+        body
+    };
+}
+
+/**
+ * Run an async mapper over `items` with at most `concurrency` in flight at
+ * once, preserving input order in the result. No external dependency.
+ */
+async function mapWithConcurrency<T, R>(
+    items: readonly T[],
+    concurrency: number,
+    mapper: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let next = 0;
+    const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+        while (next < items.length) {
+            const current = next++;
+            const item = items[current];
+            if (item === undefined) break;
+            results[current] = await mapper(item, current);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+}
 
 const articleSummarySchema = z.object({
     id: z.number().int(),
@@ -49,7 +110,9 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                     .string()
                     .min(1)
                     .max(256)
-                    .describe('Free-text search query, e.g. "TFSA contribution limit", "options trading fees".'),
+                    .describe(
+                        'Free-text search query, e.g. "TFSA contribution limit", "options trading fees".'
+                    ),
                 limit: z
                     .number()
                     .int()
@@ -72,7 +135,7 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
             traceTool('search_help_center', { query, limit }, async () => {
                 const max = limit ?? 10;
                 const hits = await client.search(query, max);
-                const results = hits.map(h => ({
+                const results = hits.map((h) => ({
                     id: h.id,
                     title: h.title,
                     url: h.html_url,
@@ -105,7 +168,7 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
         async () =>
             traceTool('list_categories', {}, async () => {
                 const categories = await client.listCategories();
-                const summaries = categories.map(c => ({
+                const summaries = categories.map((c) => ({
                     id: c.id,
                     name: c.name,
                     description: c.description ?? '',
@@ -131,7 +194,9 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                     .number()
                     .int()
                     .optional()
-                    .describe('If provided, only return sections inside this category. Obtain via list_categories.')
+                    .describe(
+                        'If provided, only return sections inside this category. Obtain via list_categories.'
+                    )
             },
             outputSchema: {
                 count: z.number().int(),
@@ -141,7 +206,7 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
         async ({ category_id }) =>
             traceTool('list_sections', { category_id }, async () => {
                 const sections = await client.listSections(category_id);
-                const summaries = sections.map(s => ({
+                const summaries = sections.map((s) => ({
                     id: s.id,
                     name: s.name,
                     description: s.description ?? '',
@@ -182,7 +247,7 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
         async ({ section_id, limit }) =>
             traceTool('list_articles', { section_id, limit }, async () => {
                 const articles = await client.listArticles(section_id, limit ?? 50);
-                const summaries = articles.map(a => ({
+                const summaries = articles.map((a) => ({
                     id: a.id,
                     title: a.title,
                     url: a.html_url,
@@ -206,7 +271,10 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
             description:
                 'Fetch the full content of one article. By default returns a clean Markdown rendering of the article body (HTML stripped, links and headings preserved). Pass `format: "html"` for the raw HTML if needed.',
             inputSchema: {
-                article_id: z.number().int().describe('Numeric article ID. Obtain via search_help_center or list_articles.'),
+                article_id: z
+                    .number()
+                    .int()
+                    .describe('Numeric article ID. Obtain via search_help_center or list_articles.'),
                 format: z
                     .enum(['markdown', 'html', 'text'])
                     .optional()
@@ -228,22 +296,9 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
             traceTool('get_article', { article_id, format }, async () => {
                 const fmt = format ?? 'markdown';
                 const article = await client.getArticle(article_id);
-                const rawBody = article.body ?? '';
-                const body =
-                    fmt === 'html' ? rawBody : fmt === 'text' ? stripTags(rawBody).trim() : htmlToMarkdown(rawBody);
-                const structured = {
-                    id: article.id,
-                    title: article.title,
-                    url: article.html_url,
-                    section_id: article.section_id ?? null,
-                    locale: article.locale,
-                    labels: article.label_names ?? [],
-                    updated_at: article.updated_at,
-                    format: fmt,
-                    body
-                };
+                const structured = toArticleStructured(article, fmt);
                 return {
-                    content: [{ type: 'text', text: body }],
+                    content: [{ type: 'text', text: structured.body }],
                     structuredContent: structured
                 };
             })
@@ -263,6 +318,10 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 id: z.number().int(),
                 title: z.string(),
                 url: z.string().url(),
+                section_id: z.number().int().nullable(),
+                locale: z.string(),
+                labels: z.array(z.string()),
+                updated_at: z.string(),
                 format: z.enum(['markdown', 'html', 'text']),
                 body: z.string()
             }
@@ -275,9 +334,10 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 } catch {
                     throw new HelpCenterError(`Invalid URL: ${url}`);
                 }
-                if (!parsed.hostname.endsWith(HELP_CENTER_DOMAIN)) {
+                const host = parsed.hostname.toLowerCase();
+                if (host !== HELP_CENTER_DOMAIN && !host.endsWith(`.${HELP_CENTER_DOMAIN}`)) {
                     throw new HelpCenterError(
-                        `URL host ${parsed.hostname} is not a Wealthsimple Help Center URL (expected *.${HELP_CENTER_DOMAIN}).`
+                        `URL host ${parsed.hostname} is not a Wealthsimple Help Center URL (expected ${HELP_CENTER_DOMAIN} or a subdomain).`
                     );
                 }
                 const id = HelpCenterClient.parseArticleIdFromUrl(parsed.pathname);
@@ -286,12 +346,9 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 }
                 const fmt = format ?? 'markdown';
                 const article = await client.getArticle(id);
-                const rawBody = article.body ?? '';
-                const body =
-                    fmt === 'html' ? rawBody : fmt === 'text' ? stripTags(rawBody).trim() : htmlToMarkdown(rawBody);
-                const structured = { id: article.id, title: article.title, url: article.html_url, format: fmt, body };
+                const structured = toArticleStructured(article, fmt);
                 return {
-                    content: [{ type: 'text', text: body }],
+                    content: [{ type: 'text', text: structured.body }],
                     structuredContent: structured
                 };
             })
@@ -307,7 +364,9 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 include_articles: z
                     .boolean()
                     .optional()
-                    .describe('If true (default), include article titles under each section. If false, return only categories→sections.'),
+                    .describe(
+                        'If true (default), include article titles under each section. If false, return only categories→sections.'
+                    ),
                 articles_per_section: z
                     .number()
                     .int()
@@ -320,6 +379,7 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 category_count: z.number().int(),
                 section_count: z.number().int(),
                 article_count: z.number().int(),
+                truncated: z.boolean(),
                 categories: z.array(
                     categorySummarySchema.extend({
                         sections: z.array(
@@ -342,7 +402,10 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
             traceTool('browse_taxonomy', { include_articles, articles_per_section }, async () => {
                 const includeArticles = include_articles ?? true;
                 const perSection = articles_per_section ?? 50;
-                const [categories, allSections] = await Promise.all([client.listCategories(), client.listSections()]);
+                const [categories, allSections] = await Promise.all([
+                    client.listCategories(),
+                    client.listSections()
+                ]);
                 const sectionsByCategory = new Map<number, typeof allSections>();
                 for (const s of allSections) {
                     const list = sectionsByCategory.get(s.category_id) ?? [];
@@ -351,43 +414,58 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
                 }
 
                 let articleCount = 0;
-                const tree = await Promise.all(
-                    categories.map(async c => {
-                        const sections = sectionsByCategory.get(c.id) ?? [];
-                        const sectionPayloads = await Promise.all(
-                            sections.map(async s => {
-                                const articles = includeArticles ? await client.listArticles(s.id, perSection) : [];
-                                articleCount += articles.length;
-                                return {
-                                    id: s.id,
-                                    name: s.name,
-                                    description: s.description ?? '',
-                                    category_id: s.category_id,
-                                    url: s.html_url,
-                                    locale: s.locale,
-                                    articles: articles.map(a => ({
-                                        id: a.id,
-                                        title: a.title,
-                                        url: a.html_url,
-                                        updated_at: a.updated_at
-                                    }))
-                                };
-                            })
-                        );
+                let truncated = false;
+                // Bounded fan-out: throttle the per-section article fetches to
+                // at most MAX_CONCURRENCY in flight across the whole taxonomy so
+                // we never open hundreds of simultaneous connections.
+                const MAX_CONCURRENCY = 5;
+                const sectionResults = includeArticles
+                    ? await mapWithConcurrency(allSections, MAX_CONCURRENCY, (s) =>
+                          client.listArticles(s.id, perSection)
+                      )
+                    : allSections.map(() => [] as Awaited<ReturnType<typeof client.listArticles>>);
+                const articlesBySection = new Map<number, (typeof sectionResults)[number]>();
+                allSections.forEach((s, i) => {
+                    articlesBySection.set(s.id, sectionResults[i] ?? []);
+                });
+
+                const tree = categories.map((c) => {
+                    const sections = sectionsByCategory.get(c.id) ?? [];
+                    const sectionPayloads = sections.map((s) => {
+                        const articles = articlesBySection.get(s.id) ?? [];
+                        articleCount += articles.length;
+                        // A full page back means we hit the per-section cap and
+                        // there may be more articles we didn't surface.
+                        if (includeArticles && articles.length >= perSection) truncated = true;
                         return {
-                            id: c.id,
-                            name: c.name,
-                            description: c.description ?? '',
-                            url: c.html_url,
-                            locale: c.locale,
-                            sections: sectionPayloads
+                            id: s.id,
+                            name: s.name,
+                            description: s.description ?? '',
+                            category_id: s.category_id,
+                            url: s.html_url,
+                            locale: s.locale,
+                            articles: articles.map((a) => ({
+                                id: a.id,
+                                title: a.title,
+                                url: a.html_url,
+                                updated_at: a.updated_at
+                            }))
                         };
-                    })
-                );
+                    });
+                    return {
+                        id: c.id,
+                        name: c.name,
+                        description: c.description ?? '',
+                        url: c.html_url,
+                        locale: c.locale,
+                        sections: sectionPayloads
+                    };
+                });
                 const structured = {
                     category_count: categories.length,
                     section_count: allSections.length,
                     article_count: articleCount,
+                    truncated,
                     categories: tree
                 };
                 return {
@@ -399,5 +477,8 @@ export function registerTools(server: McpServer, { client }: ToolDeps): void {
 }
 
 function stripTags(html: string): string {
-    return html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    return html
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 }

@@ -28,12 +28,16 @@
         "node": ">=20"
     },
     "scripts": {
-        "build": "tsc",
+        "build": "tsc -p tsconfig.build.json",
         "start": "node build/index.js",
         "start:telemetry": "node --env-file=.env build/index.js",
         "dev": "tsx watch src/index.ts",
         "dev:telemetry": "tsx watch --env-file=.env src/index.ts",
         "typecheck": "tsc --noEmit",
+        "lint": "biome check .",
+        "lint:fix": "biome check --write .",
+        "test": "vitest run",
+        "test:watch": "vitest",
         "prepublishOnly": "npm run build"
     },
     "keywords": [
@@ -50,8 +54,10 @@
         "zod": "^4.4.3"
     },
     "devDependencies": {
+        "@biomejs/biome": "^2.4.16",
         "@types/node": "^24.10.1",
         "tsx": "^4.20.4",
-        "typescript": "^5.9.3"
+        "typescript": "^5.9.3",
+        "vitest": "^4.1.8"
     }
 }
